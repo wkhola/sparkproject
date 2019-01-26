@@ -127,6 +127,7 @@ public class JDBCHelper {
     }
 
     public int[] executeBatch(String sql, List<Object[]> paramsList){
+
         int[] rtn = null;
 
         Connection conn = null;
