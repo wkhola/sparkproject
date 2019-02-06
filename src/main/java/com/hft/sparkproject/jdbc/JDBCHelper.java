@@ -1,4 +1,4 @@
-package com.hft.spark.jdbc;
+package com.hft.sparkproject.jdbc;
 
 import com.hft.sparkproject.conf.ConfigurationManager;
 import com.hft.sparkproject.constant.Constants;

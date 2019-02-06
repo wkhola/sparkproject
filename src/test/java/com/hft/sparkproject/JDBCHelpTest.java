@@ -1,9 +1,8 @@
 package com.hft.sparkproject;
 
-import com.hft.spark.jdbc.JDBCHelper;
+import com.hft.sparkproject.jdbc.JDBCHelper;
 import org.junit.*;
 
-import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
