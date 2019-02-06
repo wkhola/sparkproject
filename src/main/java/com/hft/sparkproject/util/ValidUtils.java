@@ -2,7 +2,7 @@ package com.hft.sparkproject.util;
 
 /**
  * 校验工具类
- * @author Administrator
+ * @author kai.wu
  */
 public class ValidUtils {
 

@@ -121,7 +121,7 @@ public class JDBCHelper {
 
     public interface QueryCallback{
         /**
-         * @param rs
+         * @param rs do sth
          */
         void process(ResultSet rs) throws Exception;
     }
