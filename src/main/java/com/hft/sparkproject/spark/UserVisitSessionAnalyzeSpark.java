@@ -1,0 +1,134 @@
+package com.hft.sparkproject.spark;
+
+import com.alibaba.fastjson.JSONObject;
+import com.hft.sparkproject.conf.ConfigurationManager;
+import com.hft.sparkproject.constant.Constants;
+import com.hft.sparkproject.dao.ITaskDAO;
+import com.hft.sparkproject.dao.factory.DAOFactory;
+import com.hft.sparkproject.domain.Task;
+import com.hft.sparkproject.test.MockData;
+import com.hft.sparkproject.util.ParamUtils;
+import org.apache.spark.SparkConf;
+import org.apache.spark.SparkContext;
+import org.apache.spark.api.java.JavaPairRDD;
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.api.java.function.PairFunction;
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.hive.HiveContext;
+import scala.Tuple2;
+
+/**
+ * 用户访问session分析spark作业
+ * @author : kai.wu
+ * @date : 2019/2/9
+ */
+public class UserVisitSessionAnalyzeSpark {
+
+    public static void main(String[] args) {
+        // 构建上下文
+        SparkConf conf = new SparkConf()
+                .setAppName(Constants.SPARK_APP_NAME_SESSION)
+                .setMaster("local");
+        JavaSparkContext sc = new JavaSparkContext(conf);
+        SQLContext sqlContext = getSQLContest(sc.sc());
+
+        // 生成模拟数据
+        mockData(sc, sqlContext);
+
+        //获取DAO辅助组件
+        ITaskDAO taskDAO = DAOFactory.getTaskDAO();
+
+        //如果进行session粒度的数据聚合
+        // 首先从user_visit_action表中，过滤出时间
+        Long taskid = ParamUtils.getTaskIdFromArgs(args);
+
+        Task task = taskDAO.findById(taskid);
+        JSONObject taskParam = JSONObject.parseObject(task.getTaskParam());
+
+        JavaRDD<Row> acionRDD = getActionRDDByDateRange(sqlContext, taskParam);
+
+
+        // 关闭spark上下文
+        sc.close();
+    }
+
+    /**
+     * 获取SQLContext
+     * 如果是本地模式的话就是SQLContext
+     * 如果是生产环境运行的话就是HiveContext
+     * @param sc SparkContext
+     * @return SQLContext
+     */
+    private static SQLContext getSQLContest(SparkContext sc){
+        Boolean local = ConfigurationManager.getBoolean(Constants.SPARK_LOCAL);
+        if(local){
+            return new SQLContext(sc);
+        } else {
+            return new HiveContext(sc);
+        }
+    }
+
+    /**
+     *  生成模拟数据（只有本地模式， 才会去生成模拟数据）
+     * @param sc sc
+     * @param sqlContext SQLContext
+     */
+    private static void mockData(JavaSparkContext sc, SQLContext sqlContext){
+        Boolean local = ConfigurationManager.getBoolean(Constants.SPARK_LOCAL);
+        if(local){
+            MockData.mock(sc, sqlContext);
+        }
+    }
+
+    /**
+     *  获取指定日期范围内的用户访问行为数据
+     * @param sqlContext SQLContext
+     * @param taskParam 任务参数
+     * @return 行为数据RDD
+     */
+    private static JavaRDD<Row> getActionRDDByDateRange(SQLContext sqlContext, JSONObject taskParam){
+        String startDate = ParamUtils.getParam(taskParam, Constants.PARAM_START_DATE);
+        String endDate = ParamUtils.getParam(taskParam, Constants.PARAM_END_DATE);
+
+        String sql =
+                "select * " +
+                "from user_visit_action " +
+                "where date >= '" + startDate + "' " +
+                "and date <= '" + endDate + "'";
+        DataFrame actionDF = sqlContext.sql(sql);
+        return actionDF.javaRDD();
+    }
+
+    /**
+     * 按照对行为数据session粒度聚合
+     * @param actionRDD 行为数据RDD
+     * @return session行为聚合数据
+     */
+    private static JavaPairRDD<String, String> aggregateBySession(JavaRDD<Row> actionRDD){
+        JavaPairRDD<String, Row> sessionid2ActionRDD = actionRDD.mapToPair(new PairFunction<Row, String, Row>() {
+
+            private static final long serialVersionUID = 1L;
+
+            @Override
+            public Tuple2<String, Row> call(Row row) throws Exception {
+                return new Tuple2<>(row.getString(2), row);
+            }
+        });
+
+        // 对session粒度进行分组
+        JavaPairRDD<String, Iterable<Row>> sessionid2ActionsRDD = sessionid2ActionRDD.groupByKey();
+        JavaPairRDD<String, Iterable<Row>> sessionid2PartAggrInfoRDD = sessionid2ActionsRDD.mapToPair(new PairFunction<Tuple2<String, Iterable<Row>>, String, Iterable<Row>>() {
+
+            private static final long serialVersionUID = 1L;
+
+            @Override
+            public Tuple2<String, Iterable<Row>> call(Tuple2<String, Iterable<Row>> tuple) throws Exception {
+                return null;
+            }
+        });
+        return null;
+    }
+}

@@ -4,7 +4,6 @@ import com.hft.sparkproject.dao.ITaskDAO;
 import com.hft.sparkproject.domain.Task;
 import com.hft.sparkproject.jdbc.JDBCHelper;
 
-import java.sql.ResultSet;
 
 /**
  * @author : kai.wu

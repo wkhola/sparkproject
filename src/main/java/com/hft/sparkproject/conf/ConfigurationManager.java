@@ -34,4 +34,13 @@ public class ConfigurationManager {
             return 0;
         }
     }
+
+    public static Boolean getBoolean(String key){
+        String value = getProperty(key);
+        try {
+            return Boolean.valueOf(value);
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
 }
