@@ -9,16 +9,19 @@ import com.hft.sparkproject.domain.Task;
 import com.hft.sparkproject.test.MockData;
 import com.hft.sparkproject.util.ParamUtils;
 import com.hft.sparkproject.util.StringUtils;
+import com.hft.sparkproject.util.ValidUtils;
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkContext;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.hive.HiveContext;
+import org.codehaus.groovy.runtime.StringGroovyMethods;
 import scala.Tuple2;
 import scala.tools.cmd.gen.AnyVals;
 
@@ -32,6 +35,8 @@ import java.util.Iterator;
 public class UserVisitSessionAnalyzeSpark {
 
     public static void main(String[] args) {
+
+        args = new String[]{"1"};
         // 构建上下文
         SparkConf conf = new SparkConf()
                 .setAppName(Constants.SPARK_APP_NAME_SESSION)
@@ -48,13 +53,23 @@ public class UserVisitSessionAnalyzeSpark {
         //如果进行session粒度的数据聚合
         // 首先从user_visit_action表中，过滤出时间
         Long taskid = ParamUtils.getTaskIdFromArgs(args);
-
         Task task = taskDAO.findById(taskid);
         JSONObject taskParam = JSONObject.parseObject(task.getTaskParam());
 
-        JavaRDD<Row> acionRDD = getActionRDDByDateRange(sqlContext, taskParam);
+        JavaRDD<Row> actionRDD = getActionRDDByDateRange(sqlContext, taskParam);
+        JavaPairRDD<String, String> sessionid2AggrInfoRDD = aggregateBySession(actionRDD, sqlContext);
 
+        System.out.println(sessionid2AggrInfoRDD.count());
+        for(Tuple2<String, String> tuple: sessionid2AggrInfoRDD.take(10)){
+            System.out.println(tuple._2);
+        }
 
+        JavaPairRDD<String, String> filteredSessionid2AggrInfoRDD = filterSession(sessionid2AggrInfoRDD, taskParam);
+
+        System.out.println(filteredSessionid2AggrInfoRDD.count());
+        for(Tuple2<String, String> tuple: filteredSessionid2AggrInfoRDD.take(10)){
+            System.out.println(tuple._2);
+        }
         // 关闭spark上下文
         sc.close();
     }
@@ -184,5 +199,76 @@ public class UserVisitSessionAnalyzeSpark {
         });
 
         return sessionid2FullAggrInfoRDD;
+    }
+
+    /**
+     * 过滤session
+     * @param sessionid2AggrInfoRDD RDD
+     * @return javaPairRDD
+     */
+    private static JavaPairRDD<String, String> filterSession(JavaPairRDD<String, String> sessionid2AggrInfoRDD,
+                                                             final JSONObject taskParam){
+        String startAge = ParamUtils.getParam(taskParam, Constants.PARAM_START_AGE);
+        String endAge = ParamUtils.getParam(taskParam, Constants.PARAM_END_AGE);
+        String professionals = ParamUtils.getParam(taskParam, Constants.PARAM_PROFESSIONALS);
+        String cities = ParamUtils.getParam(taskParam, Constants.PARAM_CITIES);
+        String sex = ParamUtils.getParam(taskParam, Constants.PARAM_SEX);
+        String keywords = ParamUtils.getParam(taskParam, Constants.PARAM_KEYWORDS);
+        String categoryIds = ParamUtils.getParam(taskParam, Constants.PARAM_CATEGORY_IDS);
+
+        String aggrParameter = (startAge != null ? Constants.PARAM_START_AGE + "=" + startAge + "|" : "")
+                + (endAge != null ? Constants.PARAM_END_AGE + "=" + endAge + "|" : "")
+                + (professionals != null ? Constants.PARAM_PROFESSIONALS + "=" + professionals + "|" : "")
+                + (cities != null ? Constants.PARAM_CITIES + "=" + cities + "|" : "")
+                + (sex != null ? Constants.PARAM_SEX + "=" + sex + "|" : "")
+                + (keywords != null ? Constants.PARAM_KEYWORDS + "=" + keywords + "|" : "")
+                + (categoryIds != null ? Constants.PARAM_CATEGORY_IDS + "=" + categoryIds : "");
+        if(aggrParameter.endsWith(Constants.DELIMITER)){
+            aggrParameter = aggrParameter.substring(0, aggrParameter.length() - 1);
+        }
+
+        final String parameter = aggrParameter;
+        // 根据筛选参数进行过滤
+        JavaPairRDD<String, String> filteredSessionid2AggrInfoRDD = sessionid2AggrInfoRDD.filter(new Function<Tuple2<String, String>, Boolean>() {
+            @Override
+            public Boolean call(Tuple2<String, String> tuple) throws Exception {
+
+                String aggrInfo = tuple._2;
+
+
+                //按照年龄进行过滤
+                if(!ValidUtils.between(aggrInfo, Constants.FIELD_AGE, parameter, Constants.PARAM_START_AGE, Constants.PARAM_END_AGE)){
+                    return false;
+                }
+
+                //按照职业范围进行过滤
+                if(!ValidUtils.in(aggrInfo, Constants.FIELD_PROFESSIONAL, parameter, Constants.PARAM_PROFESSIONALS)){
+                    return false;
+                }
+
+                //按照城市进行过滤
+                if(!ValidUtils.in(aggrInfo, Constants.FIELD_CITY, parameter, Constants.PARAM_CITIES)){
+                    return false;
+                }
+
+                //按照性别进行过滤
+                if(!ValidUtils.equal(aggrInfo, Constants.FIELD_SEX, parameter, Constants.PARAM_SEX)){
+                    return false;
+                }
+
+                //按照搜索词进行过滤
+                if(!ValidUtils.in(aggrInfo, Constants.FIELD_SEARCH_KEY_WORDS, parameter, Constants.PARAM_KEYWORDS)){
+                    return false;
+                }
+
+                // 按照点击品类
+                if(!ValidUtils.in(aggrInfo, Constants.FIELD_CLICK_CATEGORY_IDS, parameter, Constants.PARAM_CATEGORY_IDS)){
+                    return false;
+                }
+
+                return true;
+            }
+        });
+        return filteredSessionid2AggrInfoRDD;
     }
 }

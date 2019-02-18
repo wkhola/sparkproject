@@ -35,4 +35,13 @@ public interface Constants {
      */
     String PARAM_START_DATE = "startDate";
     String PARAM_END_DATE = "endDate";
+    String PARAM_START_AGE = "startAge";
+    String PARAM_END_AGE = "endAge";
+    String PARAM_PROFESSIONALS = "professionals";
+    String PARAM_CITIES = "cities";
+    String PARAM_SEX = "sex";
+    String PARAM_KEYWORDS = "keywords";
+    String PARAM_CATEGORY_IDS = "categoryIds";
+
+    String DELIMITER = "\\|";
 }
