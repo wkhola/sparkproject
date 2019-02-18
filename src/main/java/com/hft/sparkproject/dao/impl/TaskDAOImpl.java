@@ -6,27 +6,22 @@ import com.hft.sparkproject.jdbc.JDBCHelper;
 
 
 /**
- * @author : kai.wu
- * @date : 2019/2/6
+ * 任务管理DAO实现类
+ * @author Administrator
  */
 public class TaskDAOImpl implements ITaskDAO {
 
-    /**
-     * 根据主键查询任务
-     * @param taskid 主键
-     * @return 任务
-     */
     @Override
     public Task findById(long taskid) {
-        Task task = new Task();
+        final Task task = new Task();
 
         String sql = "select * from task where task_id=?";
         Object[] params = new Object[]{taskid};
 
         JDBCHelper jdbcHelper = JDBCHelper.getInstance();
         jdbcHelper.executeQuery(sql, params, rs -> {
-            if(rs.next()){
-                long taskid1 = rs.getLong(1);
+            if (rs.next()){
+                long taskId = rs.getLong(1);
                 String taskName = rs.getString(2);
                 String createTime = rs.getString(3);
                 String startTime = rs.getString(4);
@@ -35,7 +30,7 @@ public class TaskDAOImpl implements ITaskDAO {
                 String taskStatus = rs.getString(7);
                 String taskParam = rs.getString(8);
 
-                task.setTaskid(taskid1);
+                task.setTaskid(taskId);
                 task.setTaskName(taskName);
                 task.setCreateTime(createTime);
                 task.setStartTime(startTime);
