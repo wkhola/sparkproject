@@ -21,7 +21,6 @@ import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.hive.HiveContext;
-import org.codehaus.groovy.runtime.StringGroovyMethods;
 import scala.Tuple2;
 import scala.tools.cmd.gen.AnyVals;
 
