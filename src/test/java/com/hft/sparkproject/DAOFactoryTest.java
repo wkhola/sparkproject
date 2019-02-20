@@ -14,7 +14,7 @@ public class DAOFactoryTest {
     @Test
     public void factoryTest(){
         ITaskDAO taskDAO = DAOFactory.getTaskDAO();
-        Task byId = taskDAO.findById(1);
+        Task byId = taskDAO.findById(1L);
         System.out.println(byId.getTaskName());
     }
 }

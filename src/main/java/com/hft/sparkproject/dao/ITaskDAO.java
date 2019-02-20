@@ -13,6 +13,6 @@ public interface ITaskDAO {
      * @param  taskid 主键
      * @return 任务
      */
-    Task findById(long taskid);
+    Task findById(Long taskid);
 
 }

@@ -129,9 +129,9 @@ public class UserVisitSessionAnalyzeSpark {
                 (PairFunction<Row, String, Row>) row -> new Tuple2<>(row.getString(2), row));
 
         // 对session粒度进行分组
-        JavaPairRDD<String, Iterable<Row>> userid2ActionsRDD = sessionid2ActionRDD.groupByKey();
+        JavaPairRDD<String, Iterable<Row>> sessionid2ActionsRDD = sessionid2ActionRDD.groupByKey();
 
-        JavaPairRDD<Long, String> userid2PartAggrInfoRDD = userid2ActionsRDD.mapToPair(
+        JavaPairRDD<Long, String> userid2PartAggrInfoRDD = sessionid2ActionsRDD.mapToPair(
                 (PairFunction<Tuple2<String, Iterable<Row>>, Long, String>) tuple2 -> {
 
             String sessionid = tuple2._1;

@@ -12,7 +12,7 @@ import com.hft.sparkproject.jdbc.JDBCHelper;
 public class TaskDAOImpl implements ITaskDAO {
 
     @Override
-    public Task findById(long taskid) {
+    public Task findById(Long taskid) {
         final Task task = new Task();
 
         String sql = "select * from task where task_id=?";
