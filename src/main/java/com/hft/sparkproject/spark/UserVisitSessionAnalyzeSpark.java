@@ -7,9 +7,11 @@ import com.hft.sparkproject.dao.ITaskDAO;
 import com.hft.sparkproject.dao.factory.DAOFactory;
 import com.hft.sparkproject.domain.Task;
 import com.hft.sparkproject.test.MockData;
+import com.hft.sparkproject.util.DateUtils;
 import com.hft.sparkproject.util.ParamUtils;
 import com.hft.sparkproject.util.StringUtils;
 import com.hft.sparkproject.util.ValidUtils;
+import org.apache.spark.Accumulator;
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkContext;
 import org.apache.spark.api.java.JavaPairRDD;
@@ -22,8 +24,8 @@ import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.hive.HiveContext;
 import scala.Tuple2;
-import scala.tools.cmd.gen.AnyVals;
 
+import java.util.Date;
 import java.util.Iterator;
 
 /**
@@ -51,7 +53,7 @@ public class UserVisitSessionAnalyzeSpark {
 
         //如果进行session粒度的数据聚合
         // 首先从user_visit_action表中，过滤出时间
-        Long taskid = ParamUtils.getTaskIdFromArgs(args);
+        long taskid = ParamUtils.getTaskIdFromArgs(args);
         Task task = taskDAO.findById(taskid);
         JSONObject taskParam = JSONObject.parseObject(task.getTaskParam());
 
@@ -63,7 +65,11 @@ public class UserVisitSessionAnalyzeSpark {
             System.out.println(tuple._2);
         }
 
-        JavaPairRDD<String, String> filteredSessionid2AggrInfoRDD = filterSession(sessionid2AggrInfoRDD, taskParam);
+        sessionid2AggrInfoRDD.count();
+        Accumulator<String> sessionAggrAccumulator = sc.accumulator("", new SessionAggrStatAccumulator());
+
+        JavaPairRDD<String, String> filteredSessionid2AggrInfoRDD = filterSessionAndAggrStat(sessionid2AggrInfoRDD,
+                taskParam, sessionAggrAccumulator);
 
         System.out.println(filteredSessionid2AggrInfoRDD.count());
         for(Tuple2<String, String> tuple: filteredSessionid2AggrInfoRDD.take(10)){
@@ -139,7 +145,16 @@ public class UserVisitSessionAnalyzeSpark {
 
             StringBuffer searchKeywordsBuffer = new StringBuffer("");
             StringBuffer clickCategoryIdsBuffer = new StringBuffer("");
+
             Long userid = null;
+
+            // session的起始时间
+            Date startTime = null;
+            Date endTime = null;
+
+            // session的步长
+            int stepLength = 0;
+
             while (iterator.hasNext()) {
                 Row row = iterator.next();
                 if (userid == null) {
@@ -158,12 +173,40 @@ public class UserVisitSessionAnalyzeSpark {
                         clickCategoryIdsBuffer.append(clickCategoryId).append(",");
                     }
                 }
+
+                // 计算session开始和结束时间
+                Date actionTime = DateUtils.parseTime(row.getString(4));
+
+                if(startTime == null) {
+                    startTime = actionTime;
+                }
+                if(endTime == null) {
+                    endTime = actionTime;
+                }
+
+                if (actionTime != null) {
+                    if (actionTime.before(startTime)) {
+                        startTime = actionTime;
+                    }
+                    if (actionTime.after(endTime)) {
+                        endTime = actionTime;
+                    }
+                }
+                stepLength++;
             }
             String searchKeywords = StringUtils.trimComma(searchKeywordsBuffer.toString());
             String clickCategoryIds = StringUtils.trimComma(clickCategoryIdsBuffer.toString());
+
+            long visitLength = 0;
+            if (endTime != null) {
+                visitLength = (endTime.getTime() - startTime.getTime()) / 1000;
+            }
             String partAggrInfo = Constants.FIELD_SESSION_ID + "=" + sessionid + "|"
-                    + Constants.FIELD_SEARCH_KEY_WORDS + "=" + searchKeywords + "|"
-                    + Constants.FIELD_CLICK_CATEGORY_IDS + "=" + clickCategoryIds;
+            + Constants.FIELD_SEARCH_KEYWORDS + "=" + searchKeywords + "|"
+            + Constants.FIELD_CLICK_CATEGORY_IDS + "=" + clickCategoryIds + "|"
+            + Constants.FIELD_VISIT_LENGTH + "=" + visitLength + "|"
+            + Constants.FIELD_STEP_LENGTH + "=" + stepLength + "|"
+            + Constants.FIELD_START_TIME + "=" + DateUtils.formatTime(startTime);
             return new Tuple2<>(userid, partAggrInfo);
         });
 
@@ -205,8 +248,9 @@ public class UserVisitSessionAnalyzeSpark {
      * @param sessionid2AggrInfoRDD RDD
      * @return javaPairRDD
      */
-    private static JavaPairRDD<String, String> filterSession(JavaPairRDD<String, String> sessionid2AggrInfoRDD,
-                                                             final JSONObject taskParam){
+    private static JavaPairRDD<String, String> filterSessionAndAggrStat(JavaPairRDD<String, String> sessionid2AggrInfoRDD,
+                                                                        JSONObject taskParam,
+                                                                        Accumulator<String> sessionAggrStatAccumulator){
         String startAge = ParamUtils.getParam(taskParam, Constants.PARAM_START_AGE);
         String endAge = ParamUtils.getParam(taskParam, Constants.PARAM_END_AGE);
         String professionals = ParamUtils.getParam(taskParam, Constants.PARAM_PROFESSIONALS);
@@ -226,47 +270,104 @@ public class UserVisitSessionAnalyzeSpark {
             aggrParameter = aggrParameter.substring(0, aggrParameter.length() - 1);
         }
 
-        final String parameter = aggrParameter;
+        String parameter = aggrParameter;
         // 根据筛选参数进行过滤
-        JavaPairRDD<String, String> filteredSessionid2AggrInfoRDD = sessionid2AggrInfoRDD.filter(new Function<Tuple2<String, String>, Boolean>() {
-            @Override
-            public Boolean call(Tuple2<String, String> tuple) throws Exception {
+        JavaPairRDD<String, String> filteredSessionid2AggrInfoRDD = sessionid2AggrInfoRDD.filter(
+                new Function<Tuple2<String, String>, Boolean>() {
 
-                String aggrInfo = tuple._2;
+                    private static final long serialVersionUID = -1510146875988055813L;
+
+                    @Override
+                    public Boolean call(Tuple2<String, String> tuple) throws Exception {
+
+                        String aggrInfo = tuple._2;
 
 
-                //按照年龄进行过滤
-                if(!ValidUtils.between(aggrInfo, Constants.FIELD_AGE, parameter, Constants.PARAM_START_AGE, Constants.PARAM_END_AGE)){
-                    return false;
-                }
+                        //按照年龄进行过滤
+                        if(!ValidUtils.between(aggrInfo, Constants.FIELD_AGE, parameter, Constants.PARAM_START_AGE, Constants.PARAM_END_AGE)){
+                            return false;
+                        }
 
-                //按照职业范围进行过滤
-                if(!ValidUtils.in(aggrInfo, Constants.FIELD_PROFESSIONAL, parameter, Constants.PARAM_PROFESSIONALS)){
-                    return false;
-                }
+                        //按照职业范围进行过滤
+                        if(!ValidUtils.in(aggrInfo, Constants.FIELD_PROFESSIONAL, parameter, Constants.PARAM_PROFESSIONALS)){
+                            return false;
+                        }
 
-                //按照城市进行过滤
-                if(!ValidUtils.in(aggrInfo, Constants.FIELD_CITY, parameter, Constants.PARAM_CITIES)){
-                    return false;
-                }
+                        //按照城市进行过滤
+                        if(!ValidUtils.in(aggrInfo, Constants.FIELD_CITY, parameter, Constants.PARAM_CITIES)){
+                            return false;
+                        }
 
-                //按照性别进行过滤
-                if(!ValidUtils.equal(aggrInfo, Constants.FIELD_SEX, parameter, Constants.PARAM_SEX)){
-                    return false;
-                }
+                        //按照性别进行过滤
+                        if(!ValidUtils.equal(aggrInfo, Constants.FIELD_SEX, parameter, Constants.PARAM_SEX)){
+                            return false;
+                        }
 
-                //按照搜索词进行过滤
-                if(!ValidUtils.in(aggrInfo, Constants.FIELD_SEARCH_KEY_WORDS, parameter, Constants.PARAM_KEYWORDS)){
-                    return false;
-                }
+                        //按照搜索词进行过滤
+                        if(!ValidUtils.in(aggrInfo, Constants.FIELD_SEARCH_KEYWORDS, parameter, Constants.PARAM_KEYWORDS)){
+                            return false;
+                        }
 
-                // 按照点击品类
-                if(!ValidUtils.in(aggrInfo, Constants.FIELD_CLICK_CATEGORY_IDS, parameter, Constants.PARAM_CATEGORY_IDS)){
-                    return false;
-                }
+                        // 按照点击品类
+                        if(!ValidUtils.in(aggrInfo, Constants.FIELD_CLICK_CATEGORY_IDS, parameter, Constants.PARAM_CATEGORY_IDS)){
+                            return false;
+                        }
 
-                return true;
-            }
+                        sessionAggrStatAccumulator.add(Constants.SESSION_COUNT);
+
+                        String visitLengthStr = StringUtils.getFieldFromConcatString(aggrInfo, Constants.DELIMITER,
+                                Constants.FIELD_VISIT_LENGTH);
+                        String stepLengthStr = StringUtils.getFieldFromConcatString(
+                                aggrInfo, Constants.DELIMITER, Constants.FIELD_STEP_LENGTH);
+
+                        calVisitLength(visitLengthStr);
+                        calStepLength(stepLengthStr);
+                        return true;
+                    }
+
+                    private void calVisitLength(String visitLengthStr){
+                        if (visitLengthStr != null){
+                            long visitLength = Long.valueOf(visitLengthStr);
+                            if(visitLength >= 1 && visitLength <= 3) {
+                                sessionAggrStatAccumulator.add(Constants.TIME_PERIOD_1S_3S);
+                            } else if(visitLength >= 4 && visitLength <= 6) {
+                                sessionAggrStatAccumulator.add(Constants.TIME_PERIOD_4S_6S);
+                            } else if(visitLength >= 7 && visitLength <= 9) {
+                                sessionAggrStatAccumulator.add(Constants.TIME_PERIOD_7S_9S);
+                            } else if(visitLength >= 10 && visitLength <= 30) {
+                                sessionAggrStatAccumulator.add(Constants.TIME_PERIOD_10S_30S);
+                            } else if(visitLength > 30 && visitLength <= 60) {
+                                sessionAggrStatAccumulator.add(Constants.TIME_PERIOD_30S_60S);
+                            } else if(visitLength > 60 && visitLength <= 180) {
+                                sessionAggrStatAccumulator.add(Constants.TIME_PERIOD_1M_3M);
+                            } else if(visitLength > 180 && visitLength <= 600) {
+                                sessionAggrStatAccumulator.add(Constants.TIME_PERIOD_3M_10M);
+                            } else if(visitLength > 600 && visitLength <= 1800) {
+                                sessionAggrStatAccumulator.add(Constants.TIME_PERIOD_10M_30M);
+                            } else if(visitLength > 1800) {
+                                sessionAggrStatAccumulator.add(Constants.TIME_PERIOD_30M);
+                            }
+                        }
+                    }
+
+                    private void calStepLength(String stepLengthStr) {
+                        if (stepLengthStr != null){
+                            long stepLength = Long.valueOf(stepLengthStr);
+                            if(stepLength >= 1 && stepLength <= 3) {
+                                sessionAggrStatAccumulator.add(Constants.STEP_PERIOD_1_3);
+                            } else if(stepLength >= 4 && stepLength <= 6) {
+                                sessionAggrStatAccumulator.add(Constants.STEP_PERIOD_4_6);
+                            } else if(stepLength >= 7 && stepLength <= 9) {
+                                sessionAggrStatAccumulator.add(Constants.STEP_PERIOD_7_9);
+                            } else if(stepLength >= 10 && stepLength <= 30) {
+                                sessionAggrStatAccumulator.add(Constants.STEP_PERIOD_10_30);
+                            } else if(stepLength > 30 && stepLength <= 60) {
+                                sessionAggrStatAccumulator.add(Constants.STEP_PERIOD_30_60);
+                            } else if(stepLength > 60) {
+                                sessionAggrStatAccumulator.add(Constants.STEP_PERIOD_60);
+                            }
+                        }
+                    }
         });
         return filteredSessionid2AggrInfoRDD;
     }

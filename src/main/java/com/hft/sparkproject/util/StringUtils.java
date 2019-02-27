@@ -85,15 +85,17 @@ public class StringUtils {
      * @param newFieldValue 新的field值
      * @return 字段值
      */
-    public static String setFiledInConcatString(String str, String delimiter, String field, String newFieldValue){
+    public static String setFieldInConcatString(String str, String delimiter, String field, String newFieldValue){
         String[] fields = str.split(delimiter);
 
         for (int i = 0; i < fields.length; i++) {
-            String fieldName = fields[i].split("=")[0];
-            if(fieldName.equals(field)){
-                String concatField = fieldName + "=" + newFieldValue;
-                fields[i] = concatField;
-                break;
+            if (fields[i].split("=").length == 2) {
+                String fieldName = fields[i].split("=")[0];
+                if (fieldName.equals(field)) {
+                    String concatField = fieldName + "=" + newFieldValue;
+                    fields[i] = concatField;
+                    break;
+                }
             }
         }
         StringBuffer buffer = new StringBuffer("");

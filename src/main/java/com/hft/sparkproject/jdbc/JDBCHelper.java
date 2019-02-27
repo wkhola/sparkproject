@@ -50,7 +50,6 @@ public class JDBCHelper {
             } catch (SQLException e) {
                 e.printStackTrace();
             }
-
         }
     }
 

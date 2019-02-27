@@ -130,6 +130,20 @@ public class DateUtils {
     }
 
     /**
+     * 解析时间字符串
+     * @param time 时间字符串
+     * @return Date
+     */
+    public static Date parseTime(String time) {
+        try {
+            return TIME_FORMAT.parse(time);
+        } catch (ParseException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    /**
      *  格式化时间
      * @param date Date对象
      * @return 格式化后的时间
