@@ -239,7 +239,6 @@ public class UserVisitSessionAnalyzeSpark {
                     + Constants.FIELD_SEX + "=" + sex;
             return new Tuple2<>(sessionid, fullAggrInfo);
         });
-
         return sessionid2FullAggrInfoRDD;
     }
 
