@@ -1,6 +1,8 @@
 package com.hft.sparkproject.dao.factory;
 
+import com.hft.sparkproject.dao.ISessionAggrStatDAO;
 import com.hft.sparkproject.dao.ITaskDAO;
+import com.hft.sparkproject.dao.impl.SessionAggrStatDAOImpl;
 import com.hft.sparkproject.dao.impl.TaskDAOImpl;
 
 /**
@@ -16,5 +18,9 @@ public class DAOFactory {
      */
     public static ITaskDAO getTaskDAO(){
         return new TaskDAOImpl();
+    }
+
+    public static ISessionAggrStatDAO getSessionAggrStatDAO() {
+        return new SessionAggrStatDAOImpl();
     }
 }

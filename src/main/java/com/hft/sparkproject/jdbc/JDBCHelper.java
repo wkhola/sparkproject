@@ -65,31 +65,38 @@ public class JDBCHelper {
     }
 
 
-    /*
+    /**
      *
      * SQL  CRUD
      */
-
-    public int executeUpdate(String sql, Object[] params){
+    public int executeUpdate(String sql, Object[] params) {
         int rtn = 0;
         Connection conn = null;
         PreparedStatement pstmt = null;
 
         try {
             conn = getConnection();
+            conn.setAutoCommit(false);
+
             pstmt = conn.prepareStatement(sql);
 
-            for (int i = 0; i < params.length; i++) {
-                pstmt.setObject(i + 1, params[i]);
+            if(params != null && params.length > 0) {
+                for(int i = 0; i < params.length; i++) {
+                    pstmt.setObject(i + 1, params[i]);
+                }
             }
+
             rtn = pstmt.executeUpdate();
-        } catch (SQLException e) {
+
+            conn.commit();
+        } catch (Exception e) {
             e.printStackTrace();
         } finally {
-            if(conn != null){
+            if(conn != null) {
                 dataSource.push(conn);
             }
         }
+
         return rtn;
     }
 
