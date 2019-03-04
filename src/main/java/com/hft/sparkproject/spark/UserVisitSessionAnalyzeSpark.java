@@ -24,8 +24,7 @@ import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.hive.HiveContext;
 import scala.Tuple2;
 
-import java.util.Date;
-import java.util.Iterator;
+import java.util.*;
 
 /**
  * 用户访问session分析spark作业
@@ -65,6 +64,8 @@ public class UserVisitSessionAnalyzeSpark {
 
         JavaPairRDD<String, String> filteredSessionid2AggrInfoRDD = filterSessionAndAggrStat(sessionid2AggrInfoRDD,
                 taskParam, sessionAggrAccumulator);
+
+        randomExtractSession(filteredSessionid2AggrInfoRDD);
 
         // 计算出各个范围的session占比 并写入MySQL
 
@@ -365,6 +366,69 @@ public class UserVisitSessionAnalyzeSpark {
                     }
         });
         return filteredSessionid2AggrInfoRDD;
+    }
+
+    /**
+     * 随机抽取session
+     * @param sessionid2AggrInfoRDD RDD
+     */
+    private static void randomExtractSession(JavaPairRDD<String, String> sessionid2AggrInfoRDD){
+        // 计算每天每小时的session数量
+        JavaPairRDD<String, String> time2sessionidRDD = sessionid2AggrInfoRDD.mapToPair(
+                new PairFunction<Tuple2<String, String>, String, String>() {
+
+                    private static final long serialVersionUID = 3578400639752818679L;
+
+                    @Override
+                    public Tuple2<String, String> call(Tuple2<String, String> tuple) throws Exception {
+                        String aggrInfo = tuple._2;
+                        String startTime = StringUtils.getFieldFromConcatString(aggrInfo, Constants.DELIMITER,
+                                Constants.FIELD_START_TIME);
+                        String dateHour = DateUtils.getDateHour(startTime);
+
+                        return new Tuple2<>(dateHour, aggrInfo);
+                    }
+                });
+        Map<String, Object> countMap = time2sessionidRDD.countByKey();
+
+        HashMap<String, Map<String, Long>> dateHourCountMap = new HashMap<>(16);
+
+        for (Map.Entry<String, Object> countEntry: countMap.entrySet()){
+            String dateHour = countEntry.getKey();
+            long count = (long) countEntry.getValue();
+
+            String date = dateHour.split("_")[0];
+            String hour = dateHour.split("_")[1];
+
+            Map<String, Long> hourCountMap = dateHourCountMap.computeIfAbsent(
+                    date, k -> new HashMap<>(16));
+            hourCountMap.put(hour, count);
+        }
+
+        long extractNumberPerDay = 100 / dateHourCountMap.size();
+
+        // <date, <hour, (1,26,60,30)>>
+        HashMap<String, Map<String, List<Integer>>> dateHourExtractMap = new HashMap<>(16);
+
+        for (Map.Entry<String, Map<String, Long>> dateHourCountEntry: dateHourCountMap.entrySet()){
+            String date = dateHourCountEntry.getKey();
+            Map<String, Long> hourCountMap = dateHourCountEntry.getValue();
+
+            // 便利这一天的session数
+            long sessoinCount = 0L;
+            for (long hourCount: hourCountMap.values()){
+                sessoinCount += hourCount;
+            }
+
+            for (Map.Entry<String, Long> hourCountEntry: hourCountMap.entrySet()){
+                String hour = hourCountEntry.getKey();
+                long count = hourCountEntry.getValue();
+
+                long hourExtractNumber = (long) ((double) count / (double) sessoinCount * extractNumberPerDay);
+            }
+
+
+        }
     }
 
     /**

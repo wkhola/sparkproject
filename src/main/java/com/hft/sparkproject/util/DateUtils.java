@@ -88,7 +88,7 @@ public class DateUtils {
         String date = datetime.split(" ")[0];
         String hourMinuteSecond = datetime.split(" ")[1];
         String hour = hourMinuteSecond.split(":")[0];
-        return date + hour;
+        return date + "_" + hour;
     }
 
     /**
