@@ -17,6 +17,7 @@ import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
+import org.apache.spark.api.java.function.PairFlatMapFunction;
 import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
@@ -374,6 +375,7 @@ public class UserVisitSessionAnalyzeSpark {
      */
     private static void randomExtractSession(JavaPairRDD<String, String> sessionid2AggrInfoRDD){
         // 计算每天每小时的session数量
+        //(dateHour, aggrInfo);
         JavaPairRDD<String, String> time2sessionidRDD = sessionid2AggrInfoRDD.mapToPair(
                 new PairFunction<Tuple2<String, String>, String, String>() {
 
@@ -389,6 +391,7 @@ public class UserVisitSessionAnalyzeSpark {
                         return new Tuple2<>(dateHour, aggrInfo);
                     }
                 });
+        // <date, count>  <2019-01-02_01, 15>
         Map<String, Object> countMap = time2sessionidRDD.countByKey();
 
         HashMap<String, Map<String, Long>> dateHourCountMap = new HashMap<>(16);
@@ -407,6 +410,8 @@ public class UserVisitSessionAnalyzeSpark {
 
         long extractNumberPerDay = 100 / dateHourCountMap.size();
 
+        Random random = new Random();
+
         // <date, <hour, (1,26,60,30)>>
         HashMap<String, Map<String, List<Integer>>> dateHourExtractMap = new HashMap<>(16);
 
@@ -414,21 +419,73 @@ public class UserVisitSessionAnalyzeSpark {
             String date = dateHourCountEntry.getKey();
             Map<String, Long> hourCountMap = dateHourCountEntry.getValue();
 
-            // 便利这一天的session数
+            // 遍历这一天的session数
             long sessoinCount = 0L;
             for (long hourCount: hourCountMap.values()){
                 sessoinCount += hourCount;
             }
 
+            Map<String, List<Integer>> hourExtractMap = dateHourExtractMap
+                    .computeIfAbsent(date, k -> new HashMap<>(16));
+
             for (Map.Entry<String, Long> hourCountEntry: hourCountMap.entrySet()){
                 String hour = hourCountEntry.getKey();
                 long count = hourCountEntry.getValue();
 
-                long hourExtractNumber = (long) ((double) count / (double) sessoinCount * extractNumberPerDay);
+                int hourExtractNumber = (int) ((double) count / (double) sessoinCount * extractNumberPerDay);
+
+                if (hourExtractNumber > count){
+                    hourExtractNumber = (int) count;
+                }
+
+                List<Integer> extractIndexList = hourExtractMap.
+                        computeIfAbsent(hour, k -> new ArrayList<>());
+
+                // 生成随机数
+                for (int i = 0; i < hourExtractNumber; i++) {
+                    int extractIndex = random.nextInt((int) count);
+                    while(extractIndexList.contains(extractIndex)) {
+                        extractIndex = random.nextInt((int) count);
+                    }
+                    extractIndexList.add(extractIndex);
+                }
             }
-
-
         }
+
+        //第三步， 遍历每天每小时的session， 然后根据随机索引进行抽取
+
+        JavaPairRDD<String, Iterable<String>> time2sessionsRDD = time2sessionidRDD.groupByKey();
+
+        // time2sessionsRDD <date, count>  <2019-01-02_01, 15>
+        JavaPairRDD<String, String> extractSessionsRDD = time2sessionsRDD.flatMapToPair(
+                new PairFlatMapFunction<Tuple2<String, Iterable<String>>, String, String>() {
+
+                    private static final long serialVersionUID = 6211154016125643542L;
+
+                    @Override
+                    public Iterable<Tuple2<String, String>> call(Tuple2<String, Iterable<String>> tuple) throws Exception {
+                        String dateHour = tuple._1;
+                        String date = dateHour.split("_")[0];
+                        String hour = dateHour.split("_")[1];
+                        Iterator<String> iterator = tuple._2.iterator();
+
+                        List<Integer> extractHourIndexList = dateHourExtractMap.get(date).get(hour);
+                        int index = 0;
+                        String sessionid = "";
+                        while (iterator.hasNext()){
+                            String aggrInfo = iterator.next();
+                            if (sessionid == null){
+                                sessionid = StringUtils.getFieldFromConcatString(aggrInfo,
+                                        Constants.DELIMITER, Constants.FIELD_SESSION_ID);
+                            }
+                            if (extractHourIndexList.contains(index)){
+
+                            }
+                            index++;
+                        }
+                        return null;
+                    }
+                });
     }
 
     /**
@@ -576,7 +633,7 @@ public class UserVisitSessionAnalyzeSpark {
 
         // 调用对应的DAO插入统计结果
         ISessionAggrStatDAO sessionAggrStatDAO = DAOFactory.getSessionAggrStatDAO();
-        sessionAggrStatDAO.insert(sessionAggrStat);
+//        sessionAggrStatDAO.insert(sessionAggrStat);
     }
 
 }
