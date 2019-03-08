@@ -4,9 +4,11 @@ import com.alibaba.fastjson.JSONObject;
 import com.hft.sparkproject.conf.ConfigurationManager;
 import com.hft.sparkproject.constant.Constants;
 import com.hft.sparkproject.dao.ISessionAggrStatDAO;
+import com.hft.sparkproject.dao.ISessionRandomExtractDAO;
 import com.hft.sparkproject.dao.ITaskDAO;
 import com.hft.sparkproject.dao.factory.DAOFactory;
 import com.hft.sparkproject.domain.SessionAggrStat;
+import com.hft.sparkproject.domain.SessionRandomExtract;
 import com.hft.sparkproject.domain.Task;
 import com.hft.sparkproject.test.MockData;
 import com.hft.sparkproject.util.*;
@@ -66,7 +68,7 @@ public class UserVisitSessionAnalyzeSpark {
         JavaPairRDD<String, String> filteredSessionid2AggrInfoRDD = filterSessionAndAggrStat(sessionid2AggrInfoRDD,
                 taskParam, sessionAggrAccumulator);
 
-        randomExtractSession(filteredSessionid2AggrInfoRDD);
+        randomExtractSession(taskid, filteredSessionid2AggrInfoRDD);
 
         // 计算出各个范围的session占比 并写入MySQL
 
@@ -373,7 +375,7 @@ public class UserVisitSessionAnalyzeSpark {
      * 随机抽取session
      * @param sessionid2AggrInfoRDD RDD
      */
-    private static void randomExtractSession(JavaPairRDD<String, String> sessionid2AggrInfoRDD){
+    private static void randomExtractSession(Long taskid, JavaPairRDD<String, String> sessionid2AggrInfoRDD){
         // 计算每天每小时的session数量
         //(dateHour, aggrInfo);
         JavaPairRDD<String, String> time2sessionidRDD = sessionid2AggrInfoRDD.mapToPair(
@@ -464,26 +466,39 @@ public class UserVisitSessionAnalyzeSpark {
 
                     @Override
                     public Iterable<Tuple2<String, String>> call(Tuple2<String, Iterable<String>> tuple) throws Exception {
+
+                        ArrayList<Tuple2<String, String>> extractSessionids = new ArrayList<>();
                         String dateHour = tuple._1;
                         String date = dateHour.split("_")[0];
                         String hour = dateHour.split("_")[1];
                         Iterator<String> iterator = tuple._2.iterator();
 
                         List<Integer> extractHourIndexList = dateHourExtractMap.get(date).get(hour);
+                        ISessionRandomExtractDAO sessionRandomExtractDAO = DAOFactory.getSessionRandomExtractDAO();
                         int index = 0;
-                        String sessionid = "";
                         while (iterator.hasNext()){
                             String aggrInfo = iterator.next();
-                            if (sessionid == null){
-                                sessionid = StringUtils.getFieldFromConcatString(aggrInfo,
-                                        Constants.DELIMITER, Constants.FIELD_SESSION_ID);
-                            }
                             if (extractHourIndexList.contains(index)){
+                                String sessionid = StringUtils.getFieldFromConcatString(aggrInfo,
+                                        Constants.DELIMITER, Constants.FIELD_SESSION_ID);
 
+                                SessionRandomExtract sessionRandomExtract = new SessionRandomExtract();
+
+                                sessionRandomExtract.setTaskid(taskid);
+                                sessionRandomExtract.setSessionid(sessionid);
+                                sessionRandomExtract.setStartTime(StringUtils.getFieldFromConcatString(aggrInfo,
+                                        Constants.DELIMITER, Constants.FIELD_START_TIME));
+                                sessionRandomExtract.setSearchKeywords(StringUtils.getFieldFromConcatString(
+                                        aggrInfo, Constants.DELIMITER, Constants.FIELD_SEARCH_KEYWORDS));
+                                sessionRandomExtract.setClickCategoryIds(StringUtils.getFieldFromConcatString(
+                                        aggrInfo, Constants.DELIMITER, Constants.FIELD_CLICK_CATEGORY_IDS));
+
+                                sessionRandomExtractDAO.insert(sessionRandomExtract);
+                                extractSessionids.add(new Tuple2<>(sessionid, sessionid));
                             }
                             index++;
                         }
-                        return null;
+                        return extractSessionids;
                     }
                 });
     }

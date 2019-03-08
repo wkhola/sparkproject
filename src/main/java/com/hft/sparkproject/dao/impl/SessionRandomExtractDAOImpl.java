@@ -14,9 +14,10 @@ public class SessionRandomExtractDAOImpl implements ISessionRandomExtractDAO {
 
 	/**
 	 * 插入session随机抽取
-	 * @param sessionAggrStat 
+	 * @param sessionRandomExtract sessionRandomExtract
 	 */
-	public void insert(SessionRandomExtract sessionRandomExtract) {
+	@Override
+    public void insert(SessionRandomExtract sessionRandomExtract) {
 		String sql = "insert into session_random_extract values(?,?,?,?,?)";
 		
 		Object[] params = new Object[]{sessionRandomExtract.getTaskid(),

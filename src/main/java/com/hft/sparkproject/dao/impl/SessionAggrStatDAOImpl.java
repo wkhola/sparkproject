@@ -16,7 +16,7 @@ public class SessionAggrStatDAOImpl implements ISessionAggrStatDAO {
 	
 	/**
 	 * 插入session聚合统计结果
-	 * @param sessionAggrStat 
+	 * @param sessionAggrStat sessionAggrStat
 	 */
 	@Override
 	public void insert(SessionAggrStat sessionAggrStat) {
