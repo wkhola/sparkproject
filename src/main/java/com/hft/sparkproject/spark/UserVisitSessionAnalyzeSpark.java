@@ -4,10 +4,12 @@ import com.alibaba.fastjson.JSONObject;
 import com.hft.sparkproject.conf.ConfigurationManager;
 import com.hft.sparkproject.constant.Constants;
 import com.hft.sparkproject.dao.ISessionAggrStatDAO;
+import com.hft.sparkproject.dao.ISessionDetailDAO;
 import com.hft.sparkproject.dao.ISessionRandomExtractDAO;
 import com.hft.sparkproject.dao.ITaskDAO;
 import com.hft.sparkproject.dao.factory.DAOFactory;
 import com.hft.sparkproject.domain.SessionAggrStat;
+import com.hft.sparkproject.domain.SessionDetail;
 import com.hft.sparkproject.domain.SessionRandomExtract;
 import com.hft.sparkproject.domain.Task;
 import com.hft.sparkproject.test.MockData;
@@ -21,6 +23,7 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.PairFlatMapFunction;
 import org.apache.spark.api.java.function.PairFunction;
+import org.apache.spark.api.java.function.VoidFunction;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
@@ -59,6 +62,9 @@ public class UserVisitSessionAnalyzeSpark {
         JSONObject taskParam = JSONObject.parseObject(task.getTaskParam());
 
         JavaRDD<Row> actionRDD = getActionRDDByDateRange(sqlContext, taskParam);
+
+        JavaPairRDD<String, Row> sessionid2ActionRDD = getSessionid2ActionRDD(actionRDD);
+
         JavaPairRDD<String, String> sessionid2AggrInfoRDD = aggregateBySession(actionRDD, sqlContext);
 
 
@@ -68,11 +74,9 @@ public class UserVisitSessionAnalyzeSpark {
         JavaPairRDD<String, String> filteredSessionid2AggrInfoRDD = filterSessionAndAggrStat(sessionid2AggrInfoRDD,
                 taskParam, sessionAggrAccumulator);
 
-        randomExtractSession(taskid, filteredSessionid2AggrInfoRDD);
+        randomExtractSession(taskid, filteredSessionid2AggrInfoRDD, sessionid2ActionRDD);
 
         // 计算出各个范围的session占比 并写入MySQL
-
-        filteredSessionid2AggrInfoRDD.count();
         calculateAndPersistAggrStat(sessionAggrAccumulator.value(), taskid);
 
         // 关闭spark上下文
@@ -126,6 +130,14 @@ public class UserVisitSessionAnalyzeSpark {
     }
 
     /**
+     * 获取sessionid2到访问行为数据的映射RDD
+     * @param actionRDD
+     */
+    private static JavaPairRDD<String, Row> getSessionid2ActionRDD(JavaRDD<Row> actionRDD) {
+        return actionRDD.mapToPair((PairFunction<Row, String, Row>) row -> new Tuple2<>(row.getString(2), row));
+    }
+
+    /**
      * 按照对行为数据session粒度聚合
      * @param actionRDD 行为数据RDD
      * @return session行为聚合数据
@@ -143,7 +155,7 @@ public class UserVisitSessionAnalyzeSpark {
             String sessionid = tuple2._1;
             Iterator<Row> iterator = tuple2._2.iterator();
 
-            StringBuffer searchKeywordsBuffer = new StringBuffer("");
+            StringBuffer searchKeywordsBuffer = new StringBuffer("") ;
             StringBuffer clickCategoryIdsBuffer = new StringBuffer("");
 
             Long userid = null;
@@ -226,7 +238,7 @@ public class UserVisitSessionAnalyzeSpark {
                 (PairFunction<Tuple2<Long, Tuple2<String, Row>>, String, String>) tuple -> {
             String partAggrInfo = tuple._2._1;
             Row userInfoRow = tuple._2._2;
-            String sessionid = StringUtils.getFieldFromConcatString(partAggrInfo, "\\|", Constants.FIELD_SESSION_ID);
+            String sessionid = StringUtils.getFieldFromConcatString(partAggrInfo, Constants.DELIMITER, Constants.FIELD_SESSION_ID);
 
             int age = userInfoRow.getInt(3);
             String professional = userInfoRow.getString(4);
@@ -375,7 +387,8 @@ public class UserVisitSessionAnalyzeSpark {
      * 随机抽取session
      * @param sessionid2AggrInfoRDD RDD
      */
-    private static void randomExtractSession(Long taskid, JavaPairRDD<String, String> sessionid2AggrInfoRDD){
+    private static void randomExtractSession(Long taskid, JavaPairRDD<String, String> sessionid2AggrInfoRDD,
+                                             JavaPairRDD<String, Row> sessionid2ActionRDD){
         // 计算每天每小时的session数量
         //(dateHour, aggrInfo);
         JavaPairRDD<String, String> time2sessionidRDD = sessionid2AggrInfoRDD.mapToPair(
@@ -501,6 +514,29 @@ public class UserVisitSessionAnalyzeSpark {
                         return extractSessionids;
                     }
                 });
+
+        // 第四步 获取抽取出来的明细数据
+        JavaPairRDD<String, Tuple2<String, Row>> extractSessionDetailRDD = extractSessionsRDD.join(sessionid2ActionRDD);
+        extractSessionDetailRDD.foreach((VoidFunction<Tuple2<String, Tuple2<String, Row>>>) tuple -> {
+            Row row = tuple._2._2;
+
+            SessionDetail sessionDetail = new SessionDetail();
+            sessionDetail.setTaskid(taskid);
+            sessionDetail.setUserid(row.getLong(1));
+            sessionDetail.setSessionid(row.getString(2));
+            sessionDetail.setPageid(row.getLong(3));
+            sessionDetail.setActionTime(row.getString(4));
+            sessionDetail.setSearchKeyword(row.getString(5));
+            sessionDetail.setClickCategoryId(row.getLong(6));
+            sessionDetail.setClickProductId(row.getLong(7));
+            sessionDetail.setOrderCategoryIds(row.getString(8));
+            sessionDetail.setOrderProductIds(row.getString(9));
+            sessionDetail.setPayCategoryIds(row.getString(10));
+            sessionDetail.setPayProductIds(row.getString(11));
+
+            ISessionDetailDAO sessionDetailDAO = DAOFactory.getSessionDetailDAO();
+            sessionDetailDAO.insert(sessionDetail);
+        });
     }
 
     /**
@@ -578,8 +614,6 @@ public class UserVisitSessionAnalyzeSpark {
             visitLength30m = Long.valueOf(visitLength30mStr);
         }
 
-        System.out.println(visitLength30m);
-        System.out.println(value);
         long stepLength13 = Long.valueOf(StringUtils.getFieldFromConcatString(
                 value, Constants.DELIMITER, Constants.STEP_PERIOD_1_3));
         long stepLength46 = Long.valueOf(StringUtils.getFieldFromConcatString(
@@ -648,7 +682,7 @@ public class UserVisitSessionAnalyzeSpark {
 
         // 调用对应的DAO插入统计结果
         ISessionAggrStatDAO sessionAggrStatDAO = DAOFactory.getSessionAggrStatDAO();
-//        sessionAggrStatDAO.insert(sessionAggrStat);
+        sessionAggrStatDAO.insert(sessionAggrStat);
     }
 
 }
