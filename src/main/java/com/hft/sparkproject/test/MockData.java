@@ -4,7 +4,6 @@ import com.hft.sparkproject.util.DateUtils;
 import com.hft.sparkproject.util.StringUtils;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.api.java.function.ForeachFunction;
 import org.apache.spark.sql.*;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructType;
@@ -78,11 +77,6 @@ public class MockData{
         }
 
         createUserVisitAction(sc, sqlContext, rows);
-        JavaRDD<Row> rowsRDD;
-
-        /*
-         * ==================================================================
-         */
 
         rows.clear();
 
