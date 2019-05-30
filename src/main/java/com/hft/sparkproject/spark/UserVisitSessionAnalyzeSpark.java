@@ -226,6 +226,8 @@ public class UserVisitSessionAnalyzeSpark {
         final String parameter = aggrParameter;
         // 根据筛选参数进行过滤
         JavaPairRDD<String, String> filteredSessionid2AggrInfoRDD = sessionid2AggrInfoRDD.filter(new Function<Tuple2<String, String>, Boolean>() {
+            private static final long serialVersionUID = -1510146875988055813L;
+
             @Override
             public Boolean call(Tuple2<String, String> tuple) throws Exception {
 

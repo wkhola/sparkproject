@@ -23,7 +23,7 @@ public class MockData{
      */
     public static void mock(JavaSparkContext sc,
                             SQLContext sqlContext) {
-        List<Row> rows = new ArrayList<Row>();
+        List<Row> rows = new ArrayList<>();
 
         String[] searchKeywords = new String[] {"火锅", "蛋糕", "重庆辣子鸡", "重庆小面",
                 "呷哺呷哺", "新辣道鱼火锅", "国贸大厦", "太古商场", "日本料理", "温泉"};
@@ -32,10 +32,10 @@ public class MockData{
         Random random = new Random();
 
         for(int i = 0; i < 100; i++) {
-            long userid = random.nextInt(100);
+            long userId = random.nextInt(100);
 
             for(int j = 0; j < 10; j++) {
-                String sessionid = UUID.randomUUID().toString().replace("-", "");
+                String sessionId = UUID.randomUUID().toString().replace("-", "");
                 String baseActionTime = date + " " + random.nextInt(23);
 
                 Long clickCategoryId = null;
@@ -66,7 +66,7 @@ public class MockData{
                         payProductIds = String.valueOf(random.nextInt(100));
                     }
 
-                    Row row = RowFactory.create(date, userid, sessionid,
+                    Row row = RowFactory.create(date, userId, sessionId,
                             pageid, actionTime, searchKeyword,
                             clickCategoryId, clickProductId,
                             orderCategoryIds, orderProductIds,
@@ -77,34 +77,49 @@ public class MockData{
             }
         }
 
-        JavaRDD<Row> rowsRDD = sc.parallelize(rows);
-
-        StructType schema = DataTypes.createStructType(Arrays.asList(
-                DataTypes.createStructField("date", DataTypes.StringType, true),
-                DataTypes.createStructField("user_id", DataTypes.LongType, true),
-                DataTypes.createStructField("session_id", DataTypes.StringType, true),
-                DataTypes.createStructField("page_id", DataTypes.LongType, true),
-                DataTypes.createStructField("action_time", DataTypes.StringType, true),
-                DataTypes.createStructField("search_keyword", DataTypes.StringType, true),
-                DataTypes.createStructField("click_category_id", DataTypes.LongType, true),
-                DataTypes.createStructField("click_product_id", DataTypes.LongType, true),
-                DataTypes.createStructField("order_category_ids", DataTypes.StringType, true),
-                DataTypes.createStructField("order_product_ids", DataTypes.StringType, true),
-                DataTypes.createStructField("pay_category_ids", DataTypes.StringType, true),
-                DataTypes.createStructField("pay_product_ids", DataTypes.StringType, true),
-                DataTypes.createStructField("city_id", DataTypes.LongType, true)));
-
-        Dataset<Row> df = sqlContext.createDataFrame(rowsRDD, schema);
-
-
-        df.toDF().show(10);
-        df.toDF().registerTempTable("user_visit_action");
+        createUserVisitAction(sc, sqlContext, rows);
+        JavaRDD<Row> rowsRDD;
 
         /*
          * ==================================================================
          */
 
         rows.clear();
+
+        createUserInfo(sc, sqlContext, rows, random);
+
+        rows.clear();
+
+        createProductInfo(sc, sqlContext, rows, random);
+    }
+
+    private static void createProductInfo(JavaSparkContext sc, SQLContext sqlContext, List<Row> rows, Random random) {
+        JavaRDD<Row> rowsRDD;
+        int[] productStatus = new int[]{0, 1};
+
+        for(int i = 0; i < 100; i ++) {
+            String productName = "product" + i;
+            String extendInfo = "{\"product_status\": " + productStatus[random.nextInt(2)] + "}";
+
+            Row row = RowFactory.create((long) i, productName, extendInfo);
+            rows.add(row);
+        }
+
+        rowsRDD = sc.parallelize(rows);
+
+        StructType schema3 = DataTypes.createStructType(Arrays.asList(
+                DataTypes.createStructField("product_id", DataTypes.LongType, true),
+                DataTypes.createStructField("product_name", DataTypes.StringType, true),
+                DataTypes.createStructField("extend_info", DataTypes.StringType, true)));
+
+        Dataset<Row> df3 = sqlContext.createDataFrame(rowsRDD, schema3);
+
+        df3.toDF().registerTempTable("product_info");
+        df3.toDF().show(10);
+    }
+
+    private static void createUserInfo(JavaSparkContext sc, SQLContext sqlContext, List<Row> rows, Random random) {
+        JavaRDD<Row> rowsRDD;
         String[] sexes = new String[]{"male", "female"};
         for(int i = 0; i < 100; i ++) {
             String username = "user" + i;
@@ -134,29 +149,30 @@ public class MockData{
 
         df2.toDF().registerTempTable("user_info");
         df2.toDF().show(10);
+    }
 
-        rows.clear();
+    private static void createUserVisitAction(JavaSparkContext sc, SQLContext sqlContext, List<Row> rows) {
+        JavaRDD<Row> rowsRDD = sc.parallelize(rows);
 
-        int[] productStatus = new int[]{0, 1};
+        StructType schema = DataTypes.createStructType(Arrays.asList(
+                DataTypes.createStructField("date", DataTypes.StringType, true),
+                DataTypes.createStructField("user_id", DataTypes.LongType, true),
+                DataTypes.createStructField("session_id", DataTypes.StringType, true),
+                DataTypes.createStructField("page_id", DataTypes.LongType, true),
+                DataTypes.createStructField("action_time", DataTypes.StringType, true),
+                DataTypes.createStructField("search_keyword", DataTypes.StringType, true),
+                DataTypes.createStructField("click_category_id", DataTypes.LongType, true),
+                DataTypes.createStructField("click_product_id", DataTypes.LongType, true),
+                DataTypes.createStructField("order_category_ids", DataTypes.StringType, true),
+                DataTypes.createStructField("order_product_ids", DataTypes.StringType, true),
+                DataTypes.createStructField("pay_category_ids", DataTypes.StringType, true),
+                DataTypes.createStructField("pay_product_ids", DataTypes.StringType, true),
+                DataTypes.createStructField("city_id", DataTypes.LongType, true)));
 
-        for(int i = 0; i < 100; i ++) {
-            String productName = "product" + i;
-            String extendInfo = "{\"product_status\": " + productStatus[random.nextInt(2)] + "}";
+        Dataset<Row> df = sqlContext.createDataFrame(rowsRDD, schema);
 
-            Row row = RowFactory.create((long) i, productName, extendInfo);
-            rows.add(row);
-        }
 
-        rowsRDD = sc.parallelize(rows);
-
-        StructType schema3 = DataTypes.createStructType(Arrays.asList(
-                DataTypes.createStructField("product_id", DataTypes.LongType, true),
-                DataTypes.createStructField("product_name", DataTypes.StringType, true),
-                DataTypes.createStructField("extend_info", DataTypes.StringType, true)));
-
-        Dataset<Row> df3 = sqlContext.createDataFrame(rowsRDD, schema3);
-
-        df3.toDF().registerTempTable("product_info");
-        df3.toDF().show(10);
+        df.toDF().show(10);
+        df.toDF().registerTempTable("user_visit_action");
     }
 }
