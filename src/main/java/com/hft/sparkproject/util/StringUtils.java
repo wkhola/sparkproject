@@ -85,7 +85,7 @@ public class StringUtils {
      * @param newFieldValue 新的field值
      * @return 字段值
      */
-    public static String setFiledInConcatString(String str, String delimiter, String field, String newFieldValue){
+    public static String setFieldInConcatString(String str, String delimiter, String field, String newFieldValue){
         String[] fields = str.split(delimiter);
 
         for (int i = 0; i < fields.length; i++) {

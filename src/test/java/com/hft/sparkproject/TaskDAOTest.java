@@ -11,7 +11,7 @@ public class TaskDAOTest {
     public void taskDAOTest(){
         ITaskDAO taskDAO = DAOFactory.getTaskDAO();
         Task task = taskDAO.findById(1L);
-        System.out.println(task.getTaskName());
+        System.out.println(task);
     }
 
 }

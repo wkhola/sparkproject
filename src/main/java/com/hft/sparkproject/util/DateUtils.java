@@ -12,9 +12,9 @@ import java.util.Date;
  */
 public class DateUtils {
 
-    public static final SimpleDateFormat TIME_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+    private static final SimpleDateFormat TIME_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
-    public static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyy-MM-dd");
+    private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyy-MM-dd");
 
 
     /**

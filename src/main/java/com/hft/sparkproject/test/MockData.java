@@ -4,10 +4,8 @@ import com.hft.sparkproject.util.DateUtils;
 import com.hft.sparkproject.util.StringUtils;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.api.java.function.ForeachFunction;
+import org.apache.spark.sql.*;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructType;
 
@@ -96,12 +94,11 @@ public class MockData{
                 DataTypes.createStructField("pay_product_ids", DataTypes.StringType, true),
                 DataTypes.createStructField("city_id", DataTypes.LongType, true)));
 
-        DataFrame df = sqlContext.createDataFrame(rowsRDD, schema);
+        Dataset<Row> df = sqlContext.createDataFrame(rowsRDD, schema);
 
-        df.registerTempTable("user_visit_action");
-        for(Row row : df.take(1)) {
-            System.out.println(row);
-        }
+
+        df.toDF().show(10);
+        df.toDF().registerTempTable("user_visit_action");
 
         /*
          * ==================================================================
@@ -133,12 +130,10 @@ public class MockData{
                 DataTypes.createStructField("city", DataTypes.StringType, true),
                 DataTypes.createStructField("sex", DataTypes.StringType, true)));
 
-        DataFrame df2 = sqlContext.createDataFrame(rowsRDD, schema2);
-        for(Row row : df2.take(1)) {
-            System.out.println(row);
-        }
+        Dataset<Row> df2 = sqlContext.createDataFrame(rowsRDD, schema2);
 
-        df2.registerTempTable("user_info");
+        df2.toDF().registerTempTable("user_info");
+        df2.toDF().show(10);
 
         rows.clear();
 
@@ -159,11 +154,9 @@ public class MockData{
                 DataTypes.createStructField("product_name", DataTypes.StringType, true),
                 DataTypes.createStructField("extend_info", DataTypes.StringType, true)));
 
-        DataFrame df3 = sqlContext.createDataFrame(rowsRDD, schema3);
-        for(Row row : df3.take(1)) {
-            System.out.println(row);
-        }
+        Dataset<Row> df3 = sqlContext.createDataFrame(rowsRDD, schema3);
 
-        df3.registerTempTable("product_info");
+        df3.toDF().registerTempTable("product_info");
+        df3.toDF().show(10);
     }
 }

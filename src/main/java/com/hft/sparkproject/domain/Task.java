@@ -83,4 +83,19 @@ public class Task implements Serializable{
     public void setTaskParam(String taskParam) {
         this.taskParam = taskParam;
     }
+
+    @Override
+    public String toString() {
+        return "Task{" +
+                "taskid=" + taskid +
+                ", taskName='" + taskName + '\'' +
+                ", createTime='" + createTime + '\'' +
+                ", startTime='" + startTime + '\'' +
+                ", finishTime='" + finishTime + '\'' +
+                ", taskType='" + taskType + '\'' +
+                ", taskStatus='" + taskStatus + '\'' +
+                ", taskParam='" + taskParam + '\'' +
+                '}';
+    }
+
 }

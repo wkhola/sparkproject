@@ -17,14 +17,15 @@ import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.PairFunction;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.api.java.function.VoidFunction;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.hive.HiveContext;
 import scala.Tuple2;
-import scala.tools.cmd.gen.AnyVals;
 
 import java.util.Iterator;
+import java.util.List;
 
 /**
  * 用户访问session分析spark作业
@@ -66,9 +67,6 @@ public class UserVisitSessionAnalyzeSpark {
         JavaPairRDD<String, String> filteredSessionid2AggrInfoRDD = filterSession(sessionid2AggrInfoRDD, taskParam);
 
         System.out.println(filteredSessionid2AggrInfoRDD.count());
-        for(Tuple2<String, String> tuple: filteredSessionid2AggrInfoRDD.take(10)){
-            System.out.println(tuple._2);
-        }
         // 关闭spark上下文
         sc.close();
     }
@@ -115,8 +113,8 @@ public class UserVisitSessionAnalyzeSpark {
                      "from user_visit_action " +
                      "where date >= '" + startDate + "' " +
                      "and date <= '" + endDate + "'";
-        DataFrame actionDF = sqlContext.sql(sql);
-        return actionDF.javaRDD();
+        Dataset<Row> actionDF = sqlContext.sql(sql);
+        return actionDF.toDF().javaRDD();
     }
 
     /**
@@ -127,7 +125,6 @@ public class UserVisitSessionAnalyzeSpark {
     private static JavaPairRDD<String, String> aggregateBySession(JavaRDD<Row> actionRDD, SQLContext sqlContext){
         JavaPairRDD<String, Row> sessionid2ActionRDD = actionRDD.mapToPair(
                 (PairFunction<Row, String, Row>) row -> new Tuple2<>(row.getString(2), row));
-
         // 对session粒度进行分组
         JavaPairRDD<String, Iterable<Row>> sessionid2ActionsRDD = sessionid2ActionRDD.groupByKey();
 
@@ -146,7 +143,7 @@ public class UserVisitSessionAnalyzeSpark {
                     userid = row.getLong(1);
                 }
                 String searchKeyword = row.getString(5);
-                Long clickCategoryId = row.getLong(6);
+                Object clickCategoryId = row.get(6);
 
                 if (StringUtils.isNotEmpty(searchKeyword)) {
                     if (!searchKeywordsBuffer.toString().contains(searchKeyword)) {
@@ -162,14 +159,14 @@ public class UserVisitSessionAnalyzeSpark {
             String searchKeywords = StringUtils.trimComma(searchKeywordsBuffer.toString());
             String clickCategoryIds = StringUtils.trimComma(clickCategoryIdsBuffer.toString());
             String partAggrInfo = Constants.FIELD_SESSION_ID + "=" + sessionid + "|"
-                    + Constants.FIELD_SEARCH_KEY_WORDS + "=" + searchKeywords + "|"
+                    + Constants.FIELD_SEARCH_KEYWORDS + "=" + searchKeywords + "|"
                     + Constants.FIELD_CLICK_CATEGORY_IDS + "=" + clickCategoryIds;
             return new Tuple2<>(userid, partAggrInfo);
         });
 
         // 查询所有用户数据
         String sql = "select * from user_info";
-        JavaRDD<Row> userInfoRDD = sqlContext.sql(sql).javaRDD();
+        JavaRDD<Row> userInfoRDD = sqlContext.sql(sql).toDF().javaRDD();
         JavaPairRDD<Long, Row> userid2InfoRDD = userInfoRDD.mapToPair(
                 (PairFunction<Row, Long, Row>) row -> {
             Long userid = row.getLong(0);
@@ -256,7 +253,7 @@ public class UserVisitSessionAnalyzeSpark {
                 }
 
                 //按照搜索词进行过滤
-                if(!ValidUtils.in(aggrInfo, Constants.FIELD_SEARCH_KEY_WORDS, parameter, Constants.PARAM_KEYWORDS)){
+                if(!ValidUtils.in(aggrInfo, Constants.FIELD_SEARCH_KEYWORDS, parameter, Constants.PARAM_KEYWORDS)){
                     return false;
                 }
 

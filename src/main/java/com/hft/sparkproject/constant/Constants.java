@@ -1,10 +1,9 @@
 package com.hft.sparkproject.constant;
 
-import scala.tools.cmd.gen.AnyVals;
-
 /**
  * 常量接口
  * @author Administrator
+ *
  */
 public interface Constants {
 
@@ -16,19 +15,55 @@ public interface Constants {
     String JDBC_URL = "jdbc.url";
     String JDBC_USER = "jdbc.user";
     String JDBC_PASSWORD = "jdbc.password";
+    String JDBC_URL_PROD = "jdbc.url.prod";
+    String JDBC_USER_PROD = "jdbc.user.prod";
+    String JDBC_PASSWORD_PROD = "jdbc.password.prod";
     String SPARK_LOCAL = "spark.local";
+    String SPARK_LOCAL_TASKID_SESSION = "spark.local.taskid.session";
+    String SPARK_LOCAL_TASKID_PAGE = "spark.local.taskid.page";
+    String SPARK_LOCAL_TASKID_PRODUCT = "spark.local.taskid.product";
+    String KAFKA_METADATA_BROKER_LIST = "kafka.metadata.broker.list";
+    String KAFKA_TOPICS = "kafka.topics";
 
     /**
-     * spark作业相关的常量
+     * Spark作业相关的常量
      */
     String SPARK_APP_NAME_SESSION = "UserVisitSessionAnalyzeSpark";
+    String SPARK_APP_NAME_PAGE = "PageOneStepConvertRateSpark";
     String FIELD_SESSION_ID = "sessionid";
-    String FIELD_SEARCH_KEY_WORDS = "searchKeywords";
+    String FIELD_SEARCH_KEYWORDS = "searchKeywords";
     String FIELD_CLICK_CATEGORY_IDS = "clickCategoryIds";
     String FIELD_AGE = "age";
     String FIELD_PROFESSIONAL = "professional";
     String FIELD_CITY = "city";
     String FIELD_SEX = "sex";
+    String DELIMITER = "\\|";
+    String FIELD_VISIT_LENGTH = "visitLength";
+    String FIELD_STEP_LENGTH = "stepLength";
+    String FIELD_START_TIME = "startTime";
+    String FIELD_CLICK_COUNT = "clickCount";
+    String FIELD_ORDER_COUNT = "orderCount";
+    String FIELD_PAY_COUNT = "payCount";
+    String FIELD_CATEGORY_ID = "categoryid";
+
+    String SESSION_COUNT = "session_count";
+
+    String TIME_PERIOD_1S_3S = "1s_3s";
+    String TIME_PERIOD_4S_6S = "4s_6s";
+    String TIME_PERIOD_7S_9S = "7s_9s";
+    String TIME_PERIOD_10S_30S = "10s_30s";
+    String TIME_PERIOD_30S_60S = "30s_60s";
+    String TIME_PERIOD_1M_3M = "1m_3m";
+    String TIME_PERIOD_3M_10M = "3m_10m";
+    String TIME_PERIOD_10M_30M = "10m_30m";
+    String TIME_PERIOD_30M = "30m";
+
+    String STEP_PERIOD_1_3 = "1_3";
+    String STEP_PERIOD_4_6 = "4_6";
+    String STEP_PERIOD_7_9 = "7_9";
+    String STEP_PERIOD_10_30 = "10_30";
+    String STEP_PERIOD_30_60 = "30_60";
+    String STEP_PERIOD_60 = "60";
 
     /**
      * 任务相关的常量
@@ -42,6 +77,6 @@ public interface Constants {
     String PARAM_SEX = "sex";
     String PARAM_KEYWORDS = "keywords";
     String PARAM_CATEGORY_IDS = "categoryIds";
+    String PARAM_TARGET_PAGE_FLOW = "targetPageFlow";
 
-    String DELIMITER = "\\|";
 }
